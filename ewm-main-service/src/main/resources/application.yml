@@ -1,0 +1,8 @@
+server:
+  port: 8080
+
+stats:
+  base-url: http://stats-server:9090
+
+management:
+  endpoints.web.exposure.include: health,info
