@@ -30,7 +30,7 @@ public class StatsServiceImpl implements StatsService {
 
     @Override
     public List<ViewStatsDto> getStats(LocalDateTime start, LocalDateTime end, List<String> uris, Boolean unique) {
-        if ( start == null && end != null) {
+        if (start == null && end != null) {
             throw new IllegalArgumentException("Start date must be provided if end date is specified");
         }
         if (end == null && start != null) {
@@ -46,10 +46,10 @@ public class StatsServiceImpl implements StatsService {
                 : ((uris != null) ? hitRepository.findStats(start, end, uris) : hitRepository.findAllUriStats(start, end));
 
         return statsRows.stream().map(row -> ViewStatsDto.builder()
-                .app(row.getApp())
-                .uri(row.getUri())
-                .hits(row.getHits())
-                .build())
+                        .app(row.getApp())
+                        .uri(row.getUri())
+                        .hits(row.getHits())
+                        .build())
                 .toList();
     }
 }

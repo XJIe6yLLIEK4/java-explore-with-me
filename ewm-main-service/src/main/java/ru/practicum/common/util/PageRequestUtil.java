@@ -5,7 +5,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
 public final class PageRequestUtil {
-    private PageRequestUtil() {}
+    private PageRequestUtil() {
+    }
 
     public static Pageable of(int from, int size) {
         return of(from, size, Sort.unsorted());

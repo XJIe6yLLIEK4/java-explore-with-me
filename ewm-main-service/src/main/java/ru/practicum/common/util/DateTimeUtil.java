@@ -1,11 +1,13 @@
 package ru.practicum.common.util;
 
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
+
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 public final class DateTimeUtil {
-    private DateTimeUtil() {}
+    private DateTimeUtil() {
+    }
 
     public static final String PATTERN = "yyyy-MM-dd HH:mm:ss";
     public static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern(PATTERN);

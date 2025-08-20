@@ -2,7 +2,6 @@ package ru.practicum.event.service;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.category.model.Category;
@@ -10,7 +9,6 @@ import ru.practicum.category.repository.CategoryRepository;
 import ru.practicum.common.errors.ConflictException;
 import ru.practicum.common.errors.ForbiddenOperationException;
 import ru.practicum.common.errors.NotFoundException;
-import ru.practicum.common.util.PageRequestUtil;
 import ru.practicum.event.dto.*;
 import ru.practicum.event.mapper.EventMapper;
 import ru.practicum.event.model.Event;
@@ -331,7 +329,9 @@ public class EventService {
         String ip = ClientIpResolver.resolve(request);
         String uri = request.getRequestURI();
         EndpointHitDto dto = new EndpointHitDto(null, "ewm-main-service", uri, ip, LocalDateTime.now());
-        try { statsClient.postHit(dto); } catch (RuntimeException ex) { /* ignore */ }
+        try {
+            statsClient.postHit(dto);
+        } catch (RuntimeException ex) { /* ignore */ }
     }
 
     private static boolean containsIgnoreCase(String source, String needle) {

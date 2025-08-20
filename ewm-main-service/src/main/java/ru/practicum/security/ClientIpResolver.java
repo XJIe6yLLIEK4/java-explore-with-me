@@ -3,7 +3,8 @@ package ru.practicum.security;
 import jakarta.servlet.http.HttpServletRequest;
 
 public final class ClientIpResolver {
-    private ClientIpResolver() {}
+    private ClientIpResolver() {
+    }
 
     public static String resolve(HttpServletRequest request) {
         if (request == null) return "0.0.0.0";
