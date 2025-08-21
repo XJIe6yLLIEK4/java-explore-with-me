@@ -2,6 +2,10 @@ package ru.practicum.event.service;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.category.model.Category;
@@ -27,6 +31,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class EventService {
@@ -48,21 +53,20 @@ public class EventService {
         if (dto.getEventDate() != null && dto.getEventDate().isBefore(LocalDateTime.now().plusHours(2))) {
             throw new IllegalArgumentException("Event date must be at least 2 hours in the future");
         }
-        Event e = new Event();
-        e.setAnnotation(dto.getAnnotation());
-        e.setTitle(dto.getTitle());
-        e.setDescription(dto.getDescription());
-        e.setCategory(category);
-        e.setInitiator(initiator);
-        e.setEventDate(dto.getEventDate());
-        if (dto.getLocation() != null) {
-            e.setLocationLat(dto.getLocation().getLat());
-            e.setLocationLon(dto.getLocation().getLon());
-        }
-        e.setPaid(Boolean.TRUE.equals(dto.getPaid()));
-        e.setParticipantLimit(dto.getParticipantLimit() == null ? 0 : dto.getParticipantLimit());
-        e.setRequestModeration(dto.getRequestModeration() == null ? Boolean.TRUE : dto.getRequestModeration());
-        e.setState(EventState.PENDING);
+        Event e = Event.builder()
+                .annotation(dto.getAnnotation())
+                .title(dto.getTitle())
+                .description(dto.getDescription())
+                .category(category)
+                .initiator(initiator)
+                .eventDate(dto.getEventDate())
+                .locationLat(dto.getLocation() == null ? null : dto.getLocation().getLat())
+                .locationLon(dto.getLocation() == null ? null : dto.getLocation().getLon())
+                .paid(Boolean.TRUE.equals(dto.getPaid()))
+                .participantLimit(dto.getParticipantLimit() == null ? 0 : dto.getParticipantLimit())
+                .requestModeration(dto.getRequestModeration() == null ? Boolean.TRUE : dto.getRequestModeration())
+                .state(EventState.PENDING)
+                .build();
 
         Event saved = eventRepository.save(e);
         return mapper.toFullDto(saved, 0L, 0L);
@@ -124,22 +128,42 @@ public class EventService {
         if (rangeStart != null && rangeEnd != null && rangeStart.isAfter(rangeEnd)) {
             throw new IllegalArgumentException("rangeStart must be before rangeEnd");
         }
-        List<Event> all = eventRepository.findAll();
-        return all.stream()
-                .filter(e -> users == null || users.isEmpty() || users.contains(e.getInitiator().getId()))
-                .filter(e -> states == null || states.isEmpty() || states.contains(e.getState().name()))
-                .filter(e -> categories == null || categories.isEmpty() || categories.contains(e.getCategory().getId()))
-                .filter(e -> rangeStart == null || !e.getEventDate().isBefore(rangeStart))
-                .filter(e -> rangeEnd == null || !e.getEventDate().isAfter(rangeEnd))
-                .sorted(Comparator.comparing(Event::getId))
-                .skip(from)
-                .limit(size)
-                .map(e -> {
-                    long confirmed = requestRepository.countByEvent_IdAndStatus(e.getId(), RequestStatus.CONFIRMED);
-                    long views = fetchViews(Collections.singletonList(e.getId()), null, null).getOrDefault(e.getId(), 0L);
-                    return mapper.toFullDto(e, views, confirmed);
-                })
-                .collect(Collectors.toList());
+
+        org.springframework.data.jpa.domain.Specification<Event> spec = org.springframework.data.jpa.domain.Specification.where(null);
+
+        if (users != null && !users.isEmpty()) {
+            spec = spec.and((root, q, cb) -> root.get("initiator").get("id").in(users));
+        }
+        if (states != null && !states.isEmpty()) {
+            List<EventState> es = states.stream().map(EventState::valueOf).toList();
+            spec = spec.and((root, q, cb) -> root.get("state").in(es));
+        }
+        if (categories != null && !categories.isEmpty()) {
+            spec = spec.and((root, q, cb) -> root.get("category").get("id").in(categories));
+        }
+        if (rangeStart != null) {
+            spec = spec.and((root, q, cb) -> cb.greaterThanOrEqualTo(root.get("eventDate"), rangeStart));
+        }
+        if (rangeEnd != null) {
+            spec = spec.and((root, q, cb) -> cb.lessThanOrEqualTo(root.get("eventDate"), rangeEnd));
+        }
+
+        int page = from / size;
+        var sort = org.springframework.data.domain.Sort.by("id").ascending();
+        var pageable = org.springframework.data.domain.PageRequest.of(page, size, sort);
+
+        var pageResult = eventRepository.findAll(spec, pageable);
+
+        List<Long> ids = pageResult.getContent().stream().map(Event::getId).toList();
+        Map<Long, Long> confirmed = countConfirmed(ids);
+        Map<Long, Long> views = fetchViews(ids, null, null);
+
+        return pageResult.getContent().stream()
+                .map(e -> mapper.toFullDto(
+                        e,
+                        views.getOrDefault(e.getId(), 0L),
+                        confirmed.getOrDefault(e.getId(), 0L)))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     @Transactional
@@ -179,35 +203,54 @@ public class EventService {
                                             Boolean onlyAvailable, String sort, int from, int size,
                                             HttpServletRequest request) {
         logHit(request);
-        List<Event> source = eventRepository.findAllByState(EventState.PUBLISHED);
-        LocalDateTime tmpStart = rangeStart;
-        LocalDateTime tmpEnd = rangeEnd;
-        if (tmpStart != null && tmpEnd != null && tmpStart.isAfter(tmpEnd)) {
+
+        LocalDateTime start = rangeStart;
+        LocalDateTime end = rangeEnd;
+        if (start != null && end != null && start.isAfter(end)) {
             throw new IllegalArgumentException("rangeStart must be before rangeEnd");
         }
-        if (tmpStart == null && tmpEnd == null) {
-            tmpStart = LocalDateTime.now();
-            tmpEnd = LocalDateTime.now().plusYears(100);
+        if (start == null && end == null) {
+            start = LocalDateTime.now();
+            end = LocalDateTime.now().plusYears(100);
         } else {
-            if (tmpStart == null) tmpStart = LocalDateTime.now().minusYears(10);
-            if (tmpEnd == null) tmpEnd = LocalDateTime.now().plusYears(10);
+            if (start == null) start = LocalDateTime.now().minusYears(10);
+            if (end == null) end = LocalDateTime.now().plusYears(10);
         }
-        final LocalDateTime start = tmpStart;
-        final LocalDateTime end = tmpEnd;
-        List<Event> filtered = source.stream()
-                .filter(e -> text == null || text.isBlank() ||
-                        containsIgnoreCase(e.getAnnotation(), text) || containsIgnoreCase(e.getDescription(), text))
-                .filter(e -> categories == null || categories.isEmpty() || categories.contains(e.getCategory().getId()))
-                .filter(e -> paid == null || Objects.equals(e.getPaid(), paid))
-                .filter(e -> !e.getEventDate().isBefore(start) && !e.getEventDate().isAfter(end))
-                .collect(Collectors.toList());
 
-        List<Long> ids = filtered.stream().map(Event::getId).toList();
+        Specification<Event> spec = Specification.where(
+                (root, q, cb) -> cb.equal(root.get("state"), EventState.PUBLISHED)
+        );
+
+        if (text != null && !text.isBlank()) {
+            String p = "%" + text.toLowerCase() + "%";
+            spec = spec.and((root, q, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("annotation")), p),
+                    cb.like(cb.lower(root.get("description")), p)
+            ));
+        }
+        if (categories != null && !categories.isEmpty()) {
+            spec = spec.and((root, q, cb) -> root.get("category").get("id").in(categories));
+        }
+        if (paid != null) {
+            spec = spec.and((root, q, cb) -> cb.equal(root.get("paid"), paid));
+        }
+        final LocalDateTime fs = start;
+        final LocalDateTime fe = end;
+        spec = spec.and((root, q, cb) -> cb.between(root.get("eventDate"), fs, fe));
+
+        int page = from / size;
+        Sort dbSort = Sort.by("eventDate").ascending();
+        var pageable = PageRequest.of(page, size, dbSort);
+
+        var pageData = eventRepository.findAll(spec, pageable);
+        List<Event> events = pageData.getContent();
+
+        List<Long> ids = events.stream().map(Event::getId).toList();
         Map<Long, Long> confirmed = countConfirmed(ids);
         Map<Long, Long> views = fetchViews(ids, start, end);
 
         if (Boolean.TRUE.equals(onlyAvailable)) {
-            filtered = filtered.stream()
+            events = events.stream()
                     .filter(e -> e.getParticipantLimit() == null || e.getParticipantLimit() == 0
                             || confirmed.getOrDefault(e.getId(), 0L) < e.getParticipantLimit())
                     .collect(Collectors.toList());
@@ -215,17 +258,19 @@ public class EventService {
 
         Comparator<Event> comparator;
         if ("VIEWS".equalsIgnoreCase(sort)) {
-            comparator = Comparator.comparing((Event e) -> views.getOrDefault(e.getId(), 0L)).reversed()
+            comparator = Comparator.comparing((Event e) -> views.getOrDefault(e.getId(), 0L))
+                    .reversed()
                     .thenComparing(Event::getEventDate);
         } else {
             comparator = Comparator.comparing(Event::getEventDate);
         }
 
-        return filtered.stream()
+        return events.stream()
                 .sorted(comparator)
-                .skip(from)
-                .limit(size)
-                .map(e -> mapper.toShortDto(e, views.getOrDefault(e.getId(), 0L), confirmed.getOrDefault(e.getId(), 0L)))
+                .map(e -> mapper.toShortDto(
+                        e,
+                        views.getOrDefault(e.getId(), 0L),
+                        confirmed.getOrDefault(e.getId(), 0L)))
                 .collect(Collectors.toList());
     }
 
@@ -311,6 +356,7 @@ public class EventService {
         try {
             stats = statsClient.getStats(start, end, uris, true);
         } catch (RuntimeException ex) {
+            log.debug("Failed to fetch stats: {}", ex.getMessage());
             stats = Collections.emptyList();
         }
         Map<String, Long> uriToHits = new HashMap<>();
@@ -331,7 +377,9 @@ public class EventService {
         EndpointHitDto dto = new EndpointHitDto(null, "ewm-main-service", uri, ip, LocalDateTime.now());
         try {
             statsClient.postHit(dto);
-        } catch (RuntimeException ex) { /* ignore */ }
+        } catch (RuntimeException ex) {
+            log.debug("Failed to log hit: {}", ex.getMessage());
+        }
     }
 
     private static boolean containsIgnoreCase(String source, String needle) {

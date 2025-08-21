@@ -81,7 +81,7 @@ public class ErrorHandler {
                 "Validation failed", errors);
     }
 
-    @ExceptionHandler(Throwable.class)
+    @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiError> handleUnexpected(Throwable ex) {
         return build(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Unexpected error.",

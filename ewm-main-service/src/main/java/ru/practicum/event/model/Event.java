@@ -4,18 +4,17 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import ru.practicum.category.model.Category;
 import ru.practicum.user.model.User;
 
 import java.time.LocalDateTime;
 
-@Getter
-@Setter
+@Data
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 @Entity
 @Table(name = "events")
 public class Event {
@@ -59,15 +58,19 @@ public class Event {
 
     private LocalDateTime publishedOn;
 
+    @Builder.Default
     @Column(nullable = false)
     private Boolean paid = Boolean.FALSE;
 
+    @Builder.Default
     @Column(nullable = false)
     private Integer participantLimit = 0;
 
+    @Builder.Default
     @Column(nullable = false)
     private Boolean requestModeration = Boolean.TRUE;
 
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private EventState state = EventState.PENDING;

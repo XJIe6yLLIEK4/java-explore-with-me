@@ -9,10 +9,10 @@ import ru.practicum.category.dto.NewCategoryDto;
 import ru.practicum.category.mapper.CategoryMapper;
 import ru.practicum.category.model.Category;
 import ru.practicum.category.repository.CategoryRepository;
-import ru.practicum.category.repository.CategoryUsageDao;
 import ru.practicum.common.errors.ConflictException;
 import ru.practicum.common.errors.NotFoundException;
 import ru.practicum.common.util.PageRequestUtil;
+import ru.practicum.event.repository.EventRepository;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
-    private final CategoryUsageDao usageDao;
+    private final EventRepository eventRepository;
     private final CategoryMapper mapper;
 
     @Transactional
@@ -50,7 +50,7 @@ public class CategoryService {
     public void delete(Long catId) {
         Category entity = categoryRepository.findById(catId)
                 .orElseThrow(() -> new NotFoundException("Category with id=" + catId + " was not found"));
-        long usage = usageDao.countEventsByCategoryId(catId);
+        long usage = eventRepository.countByCategory_Id(catId);
         if (usage > 0) {
             throw new ConflictException("Category is used by events and cannot be deleted.");
         }

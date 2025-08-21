@@ -34,55 +34,54 @@ public class CompilationService {
         if (dto.getTitle() == null || dto.getTitle().isBlank()) {
             throw new ConflictException("Compilation title must not be blank.");
         }
-        Compilation c = new Compilation();
-        c.setTitle(dto.getTitle());
-        c.setPinned(dto.getPinned() != null ? dto.getPinned() : Boolean.FALSE);
+        Compilation compilation = new Compilation();
+        compilation.setTitle(dto.getTitle());
+        compilation.setPinned(dto.getPinned() != null ? dto.getPinned() : Boolean.FALSE);
         if (dto.getEvents() != null && !dto.getEvents().isEmpty()) {
             Set<Event> events = new HashSet<>(eventRepository.findAllById(dto.getEvents()));
             if (events.size() != new HashSet<>(dto.getEvents()).size()) {
                 throw new NotFoundException("One or more events not found for compilation");
             }
-            c.setEvents(events);
+            compilation.setEvents(events);
         }
-        return mapper.toDto(compilationRepository.save(c));
+        return mapper.toDto(compilationRepository.save(compilation));
     }
 
     @Transactional
     public CompilationDto update(Long compId, UpdateCompilationRequest dto) {
-        Compilation c = compilationRepository.findById(compId)
+        Compilation compilation = compilationRepository.findById(compId)
                 .orElseThrow(() -> new NotFoundException("Compilation with id=" + compId + " was not found"));
         if (dto.getTitle() != null) {
             if (dto.getTitle().isBlank()) {
                 throw new ConflictException("Compilation title must not be blank.");
             }
-            c.setTitle(dto.getTitle());
+            compilation.setTitle(dto.getTitle());
         }
         if (dto.getPinned() != null) {
-            c.setPinned(dto.getPinned());
+            compilation.setPinned(dto.getPinned());
         }
         if (dto.getEvents() != null) {
             Set<Event> events = new HashSet<>(eventRepository.findAllById(dto.getEvents()));
             if (events.size() != new HashSet<>(dto.getEvents()).size()) {
                 throw new NotFoundException("One or more events not found for compilation");
             }
-            c.setEvents(events);
+            compilation.setEvents(events);
         }
-        return mapper.toDto(compilationRepository.save(c));
+        return mapper.toDto(compilationRepository.save(compilation));
     }
 
     @Transactional
     public void delete(Long compId) {
-        Compilation c = compilationRepository.findById(compId)
+        Compilation compilation = compilationRepository.findById(compId)
                 .orElseThrow(() -> new NotFoundException("Compilation with id=" + compId + " was not found"));
-        compilationRepository.delete(c);
+        compilationRepository.delete(compilation);
     }
 
     @Transactional(readOnly = true)
     public CompilationDto get(Long compId) {
-        Compilation c = compilationRepository.findById(compId)
+        Compilation compilation = compilationRepository.findById(compId)
                 .orElseThrow(() -> new NotFoundException("Compilation with id=" + compId + " was not found"));
-        c.getEvents().size();
-        return mapper.toDto(c);
+        return mapper.toDto(compilation);
     }
 
     @Transactional(readOnly = true)

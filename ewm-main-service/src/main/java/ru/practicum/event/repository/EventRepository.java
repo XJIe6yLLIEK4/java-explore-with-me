@@ -2,6 +2,7 @@ package ru.practicum.event.repository;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 import ru.practicum.event.model.Event;
 import ru.practicum.event.model.EventState;
@@ -11,7 +12,7 @@ import java.util.Collection;
 import java.util.List;
 
 @Repository
-public interface EventRepository extends JpaRepository<Event, Long> {
+public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecificationExecutor<Event> {
 
     @EntityGraph(attributePaths = {"category", "initiator"})
     List<Event> findAllByIdIn(Collection<Long> ids);
@@ -31,4 +32,6 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     @EntityGraph(attributePaths = {"category", "initiator"})
     List<Event> findAllByState(EventState state);
+
+    long countByCategory_Id(Long categoryId);
 }
