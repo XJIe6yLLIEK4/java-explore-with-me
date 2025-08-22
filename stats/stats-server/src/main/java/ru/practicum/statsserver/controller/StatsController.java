@@ -27,8 +27,8 @@ public class StatsController {
 
     @PostMapping(path = "/hit", consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    public void saveHit(@RequestBody @Valid EndpointHitDto dto) {
-        statsService.createHit(dto);
+    public EndpointHitDto saveHit(@RequestBody @Valid EndpointHitDto dto) {
+        return statsService.createHit(dto);
     }
 
     @GetMapping(path = "/stats", produces = MediaType.APPLICATION_JSON_VALUE)

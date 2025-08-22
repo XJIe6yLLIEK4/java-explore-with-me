@@ -15,3 +15,7 @@ spring:
 
 management:
     endpoints.web.exposure.include: health,info,metrics
+
+logging:
+  level:
+    org.springframework.web: DEBUG

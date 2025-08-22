@@ -30,17 +30,26 @@ public class StatsServiceImpl implements StatsService {
 
     @Override
     public List<ViewStatsDto> getStats(LocalDateTime start, LocalDateTime end, List<String> uris, Boolean unique) {
+        if (start == null && end != null) {
+            throw new IllegalArgumentException("Start date must be provided if end date is specified");
+        }
+        if (end == null && start != null) {
+            throw new IllegalArgumentException("End date must be provided if start date is specified");
+        }
         start = start != null ? start : LocalDateTime.of(2000, 1, 1, 0, 0);
         end = end != null ? end : LocalDateTime.now();
+        if (start.isAfter(end)) {
+            throw new IllegalArgumentException("Start date must be before end date");
+        }
         List<ViewStatsRow> statsRows = unique
                 ? ((uris != null) ? hitRepository.findUniqueStats(start, end, uris) : hitRepository.findUniqueAllUriStats(start, end))
                 : ((uris != null) ? hitRepository.findStats(start, end, uris) : hitRepository.findAllUriStats(start, end));
 
         return statsRows.stream().map(row -> ViewStatsDto.builder()
-                .app(row.getApp())
-                .uri(row.getUri())
-                .hits(row.getHits())
-                .build())
+                        .app(row.getApp())
+                        .uri(row.getUri())
+                        .hits(row.getHits())
+                        .build())
                 .toList();
     }
 }

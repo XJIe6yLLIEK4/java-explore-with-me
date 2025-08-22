@@ -19,7 +19,7 @@ public class StatsClient {
         this.rt = rt;
     }
 
-    public void hit(EndpointHitDto dto) {
+    public void postHit(EndpointHitDto dto) {
         rt.postForEntity("/hit", dto, Void.class);
     }
 
@@ -33,7 +33,8 @@ public class StatsClient {
             for (String u : uris) b.queryParam("uris", u);
         }
 
-        ResponseEntity<ViewStatsDto[]> resp = rt.getForEntity(b.toUriString(), ViewStatsDto[].class);
+        String url = b.build(false).toUriString();
+        ResponseEntity<ViewStatsDto[]> resp = rt.getForEntity(url, ViewStatsDto[].class);
         ViewStatsDto[] arr = resp.getBody();
         return arr == null ? Collections.emptyList() : Arrays.asList(arr);
     }
