@@ -1,4 +1,4 @@
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /build
 
 COPY pom.xml pom.xml
@@ -13,7 +13,7 @@ RUN mvn -q -f pom.xml -DskipTests -am -pl stats/stats-server dependency:go-offli
 COPY . .
 RUN mvn -q -f pom.xml -DskipTests -am -pl stats/stats-server package
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /build/stats/stats-server/target/*jar app.jar
 EXPOSE 9090

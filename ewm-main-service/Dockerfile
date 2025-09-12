@@ -1,4 +1,4 @@
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /build
 
 COPY pom.xml pom.xml
@@ -13,7 +13,7 @@ RUN mvn -q -f pom.xml -DskipTests -am -pl ewm-main-service dependency:go-offline
 COPY . .
 RUN mvn -q -f pom.xml -DskipTests -am -pl ewm-main-service package
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /build/ewm-main-service/target/*jar app.jar
 EXPOSE 8080
