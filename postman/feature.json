@@ -1,0 +1,388 @@
+{
+  "info": {
+    "_postman_id": "e6d5a2e0-comm-extended-suite",
+    "name": "ExploreWithMe — Comments (full suite, fixed)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Проверки комментариев: публикация события → создание → модерация → видимость; валидации, forbidden, 404, пагинация."
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "userId1", "value": "1" },
+    { "key": "userId2", "value": "2" },
+    { "key": "eventIdPublished", "value": "1" },
+    { "key": "eventIdUnpublished", "value": "2" },
+    { "key": "eventIdNotFound", "value": "999999" },
+    { "key": "commentId1", "value": "" },
+    { "key": "commentId2", "value": "" },
+    { "key": "commentId3", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "ADMIN • Publish event (eventIdPublished)",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{ \"stateAction\": \"PUBLISH_EVENT\" }" },
+        "url": { "raw": "{{baseUrl}}/admin/events/{{eventIdPublished}}", "host": ["{{baseUrl}}"], "path": ["admin","events","{{eventIdPublished}}"] }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('status 200 or 409 (already published)', ()=>pm.expect([200,409]).to.include(pm.response.code));"
+        ]}
+      }]
+    },
+    {
+      "name": "PUBLIC • list comments (empty or approved only)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/events/{{eventIdPublished}}/comments?from=0&size=10",
+          "host": ["{{baseUrl}}"], "path": ["events","{{eventIdPublished}}","comments"],
+          "query": [{"key":"from","value":"0"},{"key":"size","value":"10"}] }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type":"text/javascript","exec":[
+          "pm.test('status 200', ()=>pm.response.to.have.status(200));",
+          "pm.test('returns array', ()=>pm.expect(Array.isArray(pm.response.json())).to.be.true);"
+        ]}
+      }]
+    },
+    {
+      "name": "PRIVATE • add comment (user1 → published) [CREATES commentId1]",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode":"raw", "raw": "{\n  \"text\": \"Первый комментарий (будет апрув)\"\n}" },
+        "url": { "raw":"{{baseUrl}}/users/{{userId1}}/events/{{eventIdPublished}}/comments",
+          "host":["{{baseUrl}}"], "path":["users","{{userId1}}","events","{{eventIdPublished}}","comments"] }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type":"text/javascript", "exec":[
+          "pm.test('status 201', ()=>pm.response.to.have.status(201));",
+          "const j=pm.response.json(); pm.collectionVariables.set('commentId1', j.id);",
+          "pm.test('status=PENDING', ()=>pm.expect(j.status).to.eql('PENDING'));"
+        ]}
+      }]
+    },
+    {
+      "name": "ADMIN • approve commentId1",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode":"raw", "raw": "{ \"action\": \"APPROVE\" }" },
+        "url": { "raw":"{{baseUrl}}/admin/comments/{{commentId1}}", "host":["{{baseUrl}}"], "path":["admin","comments","{{commentId1}}"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[
+          "pm.test('status 200', ()=>pm.response.to.have.status(200));",
+          "pm.test('status=APPROVED', ()=>pm.expect(pm.response.json().status).to.eql('APPROVED'));"
+        ]}
+      }]
+    },
+    {
+      "name": "PUBLIC • list contains commentId1 (approved)",
+      "request": { "method":"GET", "url": { "raw":"{{baseUrl}}/events/{{eventIdPublished}}/comments",
+        "host":["{{baseUrl}}"], "path":["events","{{eventIdPublished}}","comments"] } },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[
+          "const arr=pm.response.json(); const cid=Number(pm.collectionVariables.get('commentId1'));",
+          "pm.test('status 200', ()=>pm.response.to.have.status(200));",
+          "pm.test('array contains approved comment', ()=>pm.expect(arr.some(c=>c.id===cid)).to.be.true);"
+        ]}
+      }]
+    },
+    {
+      "name": "PRIVATE • update own comment1 → becomes PENDING again",
+      "request": {
+        "method":"PATCH",
+        "header":[{ "key":"Content-Type","value":"application/json"}],
+        "body": { "mode":"raw", "raw":"{ \"text\": \"Апдейт: теперь должен стать PENDING\" }" },
+        "url": { "raw":"{{baseUrl}}/users/{{userId1}}/comments/{{commentId1}}", "host":["{{baseUrl}}"], "path":["users","{{userId1}}","comments","{{commentId1}}"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[
+          "pm.test('status 200', ()=>pm.response.to.have.status(200));",
+          "pm.test('status=PENDING after edit', ()=>pm.expect(pm.response.json().status).to.eql('PENDING'));"
+        ]}
+      }]
+    },
+    {
+      "name": "PUBLIC • list does NOT contain commentId1 (pending)",
+      "request": { "method":"GET", "url": { "raw":"{{baseUrl}}/events/{{eventIdPublished}}/comments",
+        "host":["{{baseUrl}}"], "path":["events","{{eventIdPublished}}","comments"] } },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[
+          "const arr=pm.response.json(); const cid=Number(pm.collectionVariables.get('commentId1'));",
+          "pm.test('status 200', ()=>pm.response.to.have.status(200));",
+          "pm.test('pending not visible publicly', ()=>pm.expect(arr.some(c=>c.id===cid)).to.be.false);"
+        ]}
+      }]
+    },
+    {
+      "name": "ADMIN • reject comment1 with reason",
+      "request": {
+        "method":"PATCH",
+        "header":[{ "key":"Content-Type","value":"application/json"}],
+        "body": { "mode":"raw", "raw":"{ \"action\":\"REJECT\", \"reason\":\"spam\" }" },
+        "url": { "raw":"{{baseUrl}}/admin/comments/{{commentId1}}", "host":["{{baseUrl}}"], "path":["admin","comments","{{commentId1}}"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[
+          "pm.test('status 200', ()=>pm.response.to.have.status(200));",
+          "const j=pm.response.json(); pm.test('status=REJECTED', ()=>pm.expect(j.status).to.eql('REJECTED'));",
+          "pm.test('rejectReason filled', ()=>pm.expect(j.rejectReason).to.eql('spam'));"
+        ]}
+      }]
+    },
+    {
+      "name": "PRIVATE • add comment with EMPTY text → 400",
+      "request": {
+        "method":"POST",
+        "header":[{ "key":"Content-Type","value":"application/json"}],
+        "body": { "mode":"raw", "raw":"{ \"text\":\"\" }" },
+        "url": { "raw":"{{baseUrl}}/users/{{userId1}}/events/{{eventIdPublished}}/comments",
+          "host":["{{baseUrl}}"], "path":["users","{{userId1}}","events","{{eventIdPublished}}","comments"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[ "pm.test('status 400', ()=>pm.response.to.have.status(400));" ]}
+      }]
+    },
+    {
+      "name": "PRIVATE • add comment with TOO LONG text → 400",
+      "request": {
+        "method":"POST",
+        "header":[{ "key":"Content-Type","value":"application/json"}],
+        "body": { "mode":"raw", "raw":"{}" },
+        "url": { "raw":"{{baseUrl}}/users/{{userId1}}/events/{{eventIdPublished}}/comments",
+          "host":["{{baseUrl}}"], "path":["users","{{userId1}}","events","{{eventIdPublished}}","comments"] }
+      },
+      "event": [
+        {
+          "listen":"prerequest",
+          "script": { "type":"text/javascript","exec":[
+            "const longText = Array(4101).join('X');",
+            "pm.request.body.update(JSON.stringify({ text: longText }));"
+          ]}
+        },
+        {
+          "listen":"test",
+          "script": { "type":"text/javascript","exec":[ "pm.test('status 400', ()=>pm.response.to.have.status(400));" ]}
+        }
+      ]
+    },
+    {
+      "name": "PRIVATE • my comments (user1)",
+      "request": {
+        "method":"GET",
+        "url": { "raw":"{{baseUrl}}/users/{{userId1}}/comments?from=0&size=10",
+          "host":["{{baseUrl}}"], "path":["users","{{userId1}}","comments"],
+          "query":[{"key":"from","value":"0"},{"key":"size","value":"10"}] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[
+          "pm.test('status 200', ()=>pm.response.to.have.status(200));",
+          "pm.test('returns array', ()=>pm.expect(Array.isArray(pm.response.json())).to.be.true);"
+        ]}
+      }]
+    },
+    {
+      "name": "PRIVATE • add comment2 (user1) [CREATES commentId2]",
+      "request": {
+        "method":"POST",
+        "header":[{ "key":"Content-Type","value":"application/json"}],
+        "body": { "mode":"raw", "raw":"{ \"text\":\"Второй комментарий (удалим)\" }" },
+        "url": { "raw":"{{baseUrl}}/users/{{userId1}}/events/{{eventIdPublished}}/comments",
+          "host":["{{baseUrl}}"], "path":["users","{{userId1}}","events","{{eventIdPublished}}","comments"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[
+          "pm.test('status 201', ()=>pm.response.to.have.status(201));",
+          "pm.collectionVariables.set('commentId2', pm.response.json().id);"
+        ]}
+      }]
+    },
+    {
+      "name": "PRIVATE • delete own comment2 → 204",
+      "request": {
+        "method":"DELETE",
+        "url": { "raw":"{{baseUrl}}/users/{{userId1}}/comments/{{commentId2}}",
+          "host":["{{baseUrl}}"], "path":["users","{{userId1}}","comments","{{commentId2}}"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[ "pm.test('status 204', ()=>pm.response.to.have.status(204));" ]}
+      }]
+    },
+    {
+      "name": "ADMIN • moderate deleted comment2 → 404",
+      "request": {
+        "method":"PATCH",
+        "header":[{ "key":"Content-Type","value":"application/json"}],
+        "body": { "mode":"raw", "raw":"{ \"action\":\"APPROVE\" }" },
+        "url": { "raw":"{{baseUrl}}/admin/comments/{{commentId2}}",
+          "host":["{{baseUrl}}"], "path":["admin","comments","{{commentId2}}"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[ "pm.test('status 404', ()=>pm.response.to.have.status(404));" ]}
+      }]
+    },
+    {
+      "name": "PRIVATE • add comment3 (user1) [CREATES commentId3]",
+      "request": {
+        "method":"POST",
+        "header":[{ "key":"Content-Type","value":"application/json"}],
+        "body": { "mode":"raw", "raw":"{ \"text\":\"Третий комментарий (forbidden checks)\" }" },
+        "url": { "raw":"{{baseUrl}}/users/{{userId1}}/events/{{eventIdPublished}}/comments",
+          "host":["{{baseUrl}}"], "path":["users","{{userId1}}","events","{{eventIdPublished}}","comments"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[
+          "pm.test('status 201', ()=>pm.response.to.have.status(201));",
+          "pm.collectionVariables.set('commentId3', pm.response.json().id);"
+        ]}
+      }]
+    },
+    {
+      "name": "PRIVATE • edit OTHER'S comment (user2 tries edit comment3) → 403",
+      "request": {
+        "method":"PATCH",
+        "header":[{ "key":"Content-Type","value":"application/json"}],
+        "body": { "mode":"raw", "raw":"{ \"text\":\"Я не автор, должен быть 403\" }" },
+        "url": { "raw":"{{baseUrl}}/users/{{userId2}}/comments/{{commentId3}}",
+          "host":["{{baseUrl}}"], "path":["users","{{userId2}}","comments","{{commentId3}}"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[ "pm.test('status 403', ()=>pm.response.to.have.status(403));" ]}
+      }]
+    },
+    {
+      "name": "PRIVATE • delete OTHER'S comment (user2 tries delete comment3) → 403",
+      "request": {
+        "method":"DELETE",
+        "url": { "raw":"{{baseUrl}}/users/{{userId2}}/comments/{{commentId3}}",
+          "host":["{{baseUrl}}"], "path":["users","{{userId2}}","comments","{{commentId3}}"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[ "pm.test('status 403', ()=>pm.response.to.have.status(403));" ]}
+      }]
+    },
+    {
+      "name": "PUBLIC • list with invalid from=-1 → 400",
+      "request": {
+        "method":"GET",
+        "url": { "raw":"{{baseUrl}}/events/{{eventIdPublished}}/comments?from=-1&size=10",
+          "host":["{{baseUrl}}"], "path":["events","{{eventIdPublished}}","comments"],
+          "query":[{"key":"from","value":"-1"},{"key":"size","value":"10"}] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[ "pm.test('status 400', ()=>pm.response.to.have.status(400));" ]}
+      }]
+    },
+    {
+      "name": "PUBLIC • list with invalid size=0 → 400",
+      "request": {
+        "method":"GET",
+        "url": { "raw":"{{baseUrl}}/events/{{eventIdPublished}}/comments?from=0&size=0",
+          "host":["{{baseUrl}}"], "path":["events","{{eventIdPublished}}","comments"],
+          "query":[{"key":"from","value":"0"},{"key":"size","value":"0"}] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[ "pm.test('status 400', ()=>pm.response.to.have.status(400));" ]}
+      }]
+    },
+    {
+      "name": "PUBLIC • list for NOT FOUND event → 404",
+      "request": {
+        "method":"GET",
+        "url": { "raw":"{{baseUrl}}/events/{{eventIdNotFound}}/comments",
+          "host":["{{baseUrl}}"], "path":["events","{{eventIdNotFound}}","comments"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[ "pm.test('status 404', ()=>pm.response.to.have.status(404));" ]}
+      }]
+    },
+    {
+      "name": "ADMIN • moderate non-existent comment → 404",
+      "request": {
+        "method":"PATCH",
+        "header":[{ "key":"Content-Type","value":"application/json"}],
+        "body": { "mode":"raw", "raw":"{ \"action\":\"APPROVE\" }" },
+        "url": { "raw":"{{baseUrl}}/admin/comments/99999999", "host":["{{baseUrl}}"], "path":["admin","comments","99999999"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[ "pm.test('status 404', ()=>pm.response.to.have.status(404));" ]}
+      }]
+    },
+    {
+      "name": "PUBLIC • pagination size=1 → len ≤ 1",
+      "request": {
+        "method":"GET",
+        "url": { "raw":"{{baseUrl}}/events/{{eventIdPublished}}/comments?from=0&size=1",
+          "host":["{{baseUrl}}"], "path":["events","{{eventIdPublished}}","comments"],
+          "query":[{"key":"from","value":"0"},{"key":"size","value":"1"}] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[
+          "pm.test('status 200', ()=>pm.response.to.have.status(200));",
+          "const arr=pm.response.json(); pm.test('len ≤ 1', ()=>pm.expect(arr.length<=1).to.be.true);"
+        ]}
+      }]
+    },
+    {
+      "name": "PRIVATE • update with EMPTY text → 400",
+      "request": {
+        "method":"PATCH",
+        "header":[{ "key":"Content-Type","value":"application/json"}],
+        "body": { "mode":"raw", "raw":"{ \"text\": \"\" }" },
+        "url": { "raw":"{{baseUrl}}/users/{{userId1}}/comments/{{commentId3}}",
+          "host":["{{baseUrl}}"], "path":["users","{{userId1}}","comments","{{commentId3}}"] }
+      },
+      "event": [{
+        "listen":"test",
+        "script": { "type":"text/javascript","exec":[ "pm.test('status 400', ()=>pm.response.to.have.status(400));" ]}
+      }]
+    },
+    {
+      "name": "PRIVATE • update with TOO LONG text → 400",
+      "request": {
+        "method":"PATCH",
+        "header":[{ "key":"Content-Type","value":"application/json"}],
+        "body": { "mode":"raw", "raw":"{}" },
+        "url": { "raw":"{{baseUrl}}/users/{{userId1}}/comments/{{commentId3}}",
+          "host":["{{baseUrl}}"], "path":["users","{{userId1}}","comments","{{commentId3}}"] }
+      },
+      "event": [
+        {
+          "listen":"prerequest",
+          "script": { "type":"text/javascript","exec":[
+            "const longText = Array(5001).join('Y');",
+            "pm.request.body.update(JSON.stringify({ text: longText }));"
+          ]}
+        },
+        {
+          "listen":"test",
+          "script": { "type":"text/javascript","exec":[ "pm.test('status 400', ()=>pm.response.to.have.status(400));" ]}
+        }
+      ]
+    }
+  ]
+}
